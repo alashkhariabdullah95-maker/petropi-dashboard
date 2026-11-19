@@ -20,6 +20,8 @@ Workbooks with separate `Oil Rate` and `Water Rate` columns still work with `Wel
 
 **Productivity index (PI)** is gross liquid rate divided by drawdown (`Pr − Pwf`), in m³/day/kPa. PetroPI uses the workbook's `Rate` directly (or `Well Test Rate` in the older template). For workbooks with only separate oil and water rates, gross rate is their sum. The table and filtered export show the gross rate used. Vogel qmax still uses the oil rate.
 
+**Water cut (%)** is water rate divided by gross liquid rate × 100. In the template, enter `Rate` and `Water Rate (m3/day)` and leave `WC%` blank; a supplied water rate takes precedence over `WC%`. With only separate oil and water rates, the denominator is their sum. Water cut does not require pressure data, and is unavailable when gross rate is zero.
+
 ## Flowing bottomhole pressure (Pwf)
 
 The Pwf columns are to the right of `ESP Depth` on **Well Test**. Leave `Measured Pwf (kPa)` blank to estimate it. On each row, provide `Well Type`, `Target MD (m)`, `Flowing Pressure Gradient (kPa/m MD)`, and the applicable reference:

@@ -268,12 +268,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           ["wcpercent","watercutpercent","bswpercent"].includes(normalizeHeader(String(value).replace(/%/g, " percent")))
         );
         if (percentHeader !== -1) indexes.waterCutPercent = percentHeader;
-        if (indexes.liquid === -1 && indexes.waterCutPercent !== -1) indexes.liquid = headers.indexOf("rate");
-        const hasLiquidSplit = indexes.liquid !== -1 && indexes.waterCutPercent !== -1;
+        if (indexes.liquid === -1 && (indexes.waterCutPercent !== -1 || indexes.water !== -1)) indexes.liquid = headers.indexOf("rate");
+        const hasLiquidSplit = indexes.liquid !== -1 && (indexes.waterCutPercent !== -1 || indexes.water !== -1);
         const hasSeparateRates = indexes.oil !== -1 && indexes.water !== -1;
         if (["well","date","pr"].every((key) => indexes[key] !== -1) &&
           ((hasSeparateRates && (indexes.pwf !== -1 || indexes.wellType !== -1)) || hasLiquidSplit)) {
-          return {rowIndex, indexes, useLiquidSplit: !hasSeparateRates};
+          return {rowIndex, indexes};
         }
       }
       return null;
@@ -286,31 +286,44 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         return match ? {name, matrix, ...match} : null;
       }).filter(Boolean);
       if (!candidates.length) {
-        throw new Error("No matching well-test headers. Include Well Name, Date, Pr (kPa), and either Rate with WC%, Well Test Rate with BSW%, or separate Oil and Water Rates with Measured Pwf or Well Type.");
+        throw new Error("No matching well-test headers. Include Well Name, Date, Pr (kPa), and either gross Rate with Water Rate, WC%, or BSW%; or separate Oil and Water Rates with Measured Pwf or Well Type.");
       }
       const selected = candidates.find((candidate) => candidate.name.toLowerCase() === "welltests") || candidates[0];
-      const {matrix, rowIndex, indexes, useLiquidSplit} = selected;
+      const {matrix, rowIndex, indexes} = selected;
       return matrix.slice(rowIndex + 1)
         .filter((cells) => cells.some((value) => String(value).trim() !== ""))
         .map((cells) => ({
           well: String(cells[indexes.well] ?? "").trim(),
           field: String(cells[indexes.field] ?? "").trim() || "Unassigned",
           date: normalizeWorkbookDate(cells[indexes.date]),
-          ...(useLiquidSplit ? splitLiquidRate(cells[indexes.liquid], cells[indexes.waterCutPercent]) :
-            {oil:parseNumeric(cells[indexes.oil]), water:parseNumeric(cells[indexes.water])}),
+          ...readLiquidRates(cells, indexes),
           grossRate: indexes.liquid === -1 ? undefined : parseNumeric(cells[indexes.liquid]),
           gas: indexes.gas === -1 ? 0 : parseNumeric(cells[indexes.gas]),
           pr: parseNumeric(cells[indexes.pr]),
           ...Object.fromEntries(pwfInputs.map(([key]) => [key, cells[indexes[key]] ?? ""]))
         }));
     }
+    function readLiquidRates(cells, indexes) {
+      const oilInput = cells[indexes.oil];
+      const waterInput = cells[indexes.water];
+      const oil = parseNumeric(oilInput);
+      const water = parseNumeric(waterInput);
+      if (indexes.liquid === -1) return {oil, water};
+      const gross = parseNumeric(cells[indexes.liquid]);
+      if (!Number.isFinite(gross) || gross < 0) return {oil, water, rateIssue:"Supply nonnegative total liquid Rate (m3/day)"};
+      if (String(waterInput ?? "").trim()) {
+        if (!Number.isFinite(water) || water < 0 || water > gross) {
+          return {oil, water, rateIssue:"Water Rate must be between zero and Gross Rate"};
+        }
+        return {oil:String(oilInput ?? "").trim() ? oil : gross - water, water};
+      }
+      return splitLiquidRate(gross, cells[indexes.waterCutPercent]);
+    }
     function splitLiquidRate(rate, waterCut) {
-      const liquid = parseNumeric(rate);
       const percent = parseNumeric(String(waterCut ?? "").trim().replace(/%$/, ""));
-      if (!Number.isFinite(liquid) || liquid < 0) return {oil:NaN, water:NaN, rateIssue:"Supply nonnegative total liquid Rate (m3/day)"};
-      if (!Number.isFinite(percent) || percent < 0 || percent > 100) return {oil:NaN, water:NaN, rateIssue:"Supply WC% or BSW% from 0 to 100"};
-      const water = liquid * (percent / 100);
-      return {oil:liquid - water, water};
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100) return {oil:NaN, water:NaN, rateIssue:"Supply Water Rate or WC%/BSW% from 0 to 100"};
+      const water = rate * (percent / 100);
+      return {oil:rate - water, water};
     }
     function normalizeWorkbookDate(value) {
       if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
@@ -378,12 +391,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       else if (Number.isFinite(pwf) && pwf >= row.pr) reasons.push("Require Pr > Pwf");
       const valid = reasons.length === 0;
       const drawdown = valid ? row.pr - pwf : NaN;
-      const liquid = valid ? row.oil + row.water : NaN;
       const pi = valid && drawdown > 0 ? grossRate / drawdown : NaN;
       const ratio = valid ? pwf / row.pr : NaN;
       const denominator = 1 - 0.2 * ratio - 0.8 * ratio * ratio;
       const qmax = valid && denominator > 0 ? row.oil / denominator : NaN;
-      const waterCut = valid && liquid > 0 ? row.water / liquid * 100 : (valid ? 0 : NaN);
+      const waterCut = !row.rateIssue && Number.isFinite(grossRate) && grossRate > 0 &&
+        Number.isFinite(row.water) && row.water >= 0 && row.water <= grossRate ? row.water / grossRate * 100 : NaN;
       if (valid && (!Number.isFinite(pi) || !Number.isFinite(qmax))) reasons.push("Calculation unavailable");
       return {...row, grossRate, wellType, measuredPwf:row.pwf, pwf, pwfSource, pi, qmax, waterCut, valid: reasons.length === 0, reasons};
     }
@@ -402,9 +415,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       else if (change <= thresholds.bad) { cls = "trend-danger"; icon = "▼"; }
       setBadge(id, `${icon} ${change > 0 ? "+" : ""}${fmt(change, 1)}${unit} vs previous`, cls);
     }
-    function latestPerWell(list) {
+    function latestPerWell(list, include = (row) => row.valid) {
       const map = new Map();
-      for (const row of list.filter((r) => r.valid).sort((a,b) => a.date.localeCompare(b.date))) map.set(row.well, row);
+      for (const row of list.filter(include).sort((a,b) => a.date.localeCompare(b.date))) map.set(row.well, row);
       return [...map.values()];
     }
     function average(list, key) {
@@ -461,7 +474,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       $("piMetric").innerHTML = `${fmt(average(latest, "pi"), 4)}<span class="unit">m³/day/kPa</span>`;
       $("pressureMetric").innerHTML = `${fmt(average(latest, "pr"), 0)}<span class="unit">kPa</span>`;
       $("qmaxMetric").innerHTML = `${fmt(average(latest, "qmax"), 1)}<span class="unit">m³/day</span>`;
-      const waterCut = average(latest, "waterCut");
+      const waterCut = average(latestPerWell(filtered, (r) => r.well && Number.isFinite(Date.parse(r.date)) && Number.isFinite(r.waterCut)), "waterCut");
       $("waterCutMetric").textContent = Number.isFinite(waterCut) ? `${fmt(waterCut,1)}%` : "—";
       const quality = filtered.length ? valid.length / filtered.length * 100 : NaN;
       $("qualityMetric").textContent = Number.isFinite(quality) ? `${fmt(quality, 0)}%` : "—";
@@ -572,7 +585,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       append("Well Test ", [[
         "Well Name","Field","Well Type","Date"," Rate","WC%","WC","1-WC","THP","FLP","PIP","PDP","Freq","Pr ","Perf. Depth ","ESP Depth",
         "Measured Pwf (kPa)","Injection-Point Tubing Pressure (kPa)",
-        "Reference MD (m)","Target MD (m)","Flowing Pressure Gradient (kPa/m MD)"
+        "Reference MD (m)","Target MD (m)","Flowing Pressure Gradient (kPa/m MD)","Water Rate (m3/day)"
       ]]);
       const sheet = workbook.Sheets["Well Test "];
       sheet["!cols"] = XLSX.utils.sheet_to_json(sheet, {header:1})[0].map((label) => ({wch:Math.max(12, label.length + 2)}));
