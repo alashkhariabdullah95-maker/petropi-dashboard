@@ -222,8 +222,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       date:["date","test date","test_date","well test date","test datetime"],
       oil:["oil rate","oil rate (m3/day)","oil rate (m3/d)","oil_rate","qo","oil production rate","oil"],
       water:["water rate","water rate (m3/day)","water rate (m3/d)","water_rate","qw","water production rate","water"],
-      liquid:["well test rate","well test rate (m3/day)","total liquid rate (m3/day)"],
-      bswPercent:["bsw percent","bsw percentage"],
+      liquid:["well test rate","well test rate (m3/day)","total liquid rate (m3/day)","rate (m3/day)"],
+      waterCutPercent:["wc percent","wc percentage","water cut percent","water cut percentage","bsw percent","bsw percentage"],
       gas:["gas rate","gas rate (sm3/day)","gas rate (sm3/d)","gas_rate","qg","gas production rate","gas"],
       pr:["pr","pr (kpa)","reservoir pressure","reservoir pressure (kpa)","average reservoir pressure","initial reservoir pressure","pressure"],
       pwf:["measured pwf (kpa)","measured pwf","pwf","pwf (kpa)","flowing pressure","flowing bottomhole pressure","bottomhole flowing pressure","flowing bottomhole pressure (kpa)","bottomhole pressure","bhp","flowing bhp"],
@@ -264,9 +264,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
             indexes[key] = headers.findIndex((header) => normalizedAliases.some((alias) => alias.length >= 5 && header.startsWith(alias)));
           }
         }
-        const percentHeader = matrix[rowIndex].findIndex((value) => normalizeHeader(String(value).replace(/%/g, " percent")) === "bswpercent");
-        if (percentHeader !== -1) indexes.bswPercent = percentHeader;
-        const hasLiquidSplit = indexes.liquid !== -1 && indexes.bswPercent !== -1;
+        const percentHeader = matrix[rowIndex].findIndex((value) =>
+          ["wcpercent","watercutpercent","bswpercent"].includes(normalizeHeader(String(value).replace(/%/g, " percent")))
+        );
+        if (percentHeader !== -1) indexes.waterCutPercent = percentHeader;
+        if (indexes.liquid === -1 && indexes.waterCutPercent !== -1) indexes.liquid = headers.indexOf("rate");
+        const hasLiquidSplit = indexes.liquid !== -1 && indexes.waterCutPercent !== -1;
         const hasSeparateRates = indexes.oil !== -1 && indexes.water !== -1;
         if (["well","date","pr"].every((key) => indexes[key] !== -1) &&
           ((hasSeparateRates && (indexes.pwf !== -1 || indexes.wellType !== -1)) || hasLiquidSplit)) {
@@ -283,7 +286,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         return match ? {name, matrix, ...match} : null;
       }).filter(Boolean);
       if (!candidates.length) {
-        throw new Error("No matching well-test headers. Include Well, Date, Pr (kPa), and either Well Test Rate with BSW%, or separate Oil and Water Rates with Measured Pwf or Well Type.");
+        throw new Error("No matching well-test headers. Include Well Name, Date, Pr (kPa), and either Rate with WC%, Well Test Rate with BSW%, or separate Oil and Water Rates with Measured Pwf or Well Type.");
       }
       const selected = candidates.find((candidate) => candidate.name.toLowerCase() === "welltests") || candidates[0];
       const {matrix, rowIndex, indexes, useLiquidSplit} = selected;
@@ -293,18 +296,18 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           well: String(cells[indexes.well] ?? "").trim(),
           field: String(cells[indexes.field] ?? "").trim() || "Unassigned",
           date: normalizeWorkbookDate(cells[indexes.date]),
-          ...(useLiquidSplit ? splitLiquidRate(cells[indexes.liquid], cells[indexes.bswPercent]) :
+          ...(useLiquidSplit ? splitLiquidRate(cells[indexes.liquid], cells[indexes.waterCutPercent]) :
             {oil:parseNumeric(cells[indexes.oil]), water:parseNumeric(cells[indexes.water])}),
           gas: indexes.gas === -1 ? 0 : parseNumeric(cells[indexes.gas]),
           pr: parseNumeric(cells[indexes.pr]),
           ...Object.fromEntries(pwfInputs.map(([key]) => [key, cells[indexes[key]] ?? ""]))
         }));
     }
-    function splitLiquidRate(rate, bsw) {
+    function splitLiquidRate(rate, waterCut) {
       const liquid = parseNumeric(rate);
-      const percent = parseNumeric(String(bsw ?? "").trim().replace(/%$/, ""));
-      if (!Number.isFinite(liquid) || liquid < 0) return {oil:NaN, water:NaN, rateIssue:"Supply nonnegative Well Test Rate (m3/day)"};
-      if (!Number.isFinite(percent) || percent < 0 || percent > 100) return {oil:NaN, water:NaN, rateIssue:"Supply BSW% from 0 to 100"};
+      const percent = parseNumeric(String(waterCut ?? "").trim().replace(/%$/, ""));
+      if (!Number.isFinite(liquid) || liquid < 0) return {oil:NaN, water:NaN, rateIssue:"Supply nonnegative total liquid Rate (m3/day)"};
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100) return {oil:NaN, water:NaN, rateIssue:"Supply WC% or BSW% from 0 to 100"};
       const water = liquid * (percent / 100);
       return {oil:liquid - water, water};
     }
@@ -563,17 +566,17 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       appendLabels("PVT", ["Reservoir Pressure (Pr) [kPa]","Bubble Point Pressure (Pb) [kPa]","Reservoir Temperature (Tres) [ C ]","Surface Datum μo [ cP ]","Oil Gravity [ API ]","Gas Gravity","Oil Bo [sm³/m³]","Solution GOR [sm³/m³]","Water Cut (%)"]);
       appendLabels("Completion", ["Casing Inner Diameter [inch]","Tubing Inner Diameter [inch]","Production Packer Depth [m]","Wellhead Backpressure (Pwh) [kPa]"]);
       appendLabels("ESP", ["Pump Model / Series","Pump Stages (Count)","VFD Operating Frequency (Hz)","Motor Power Rating (HP)","Head Per Stage [m]","Motor Current (Amps)"]);
-      append("Well Test", [[
-        "Well Name","Date","Well Test Rate","BSW%","BSW","1-BSW","THP","FLP","PIP","PDP","Freq","Pr","Perf. Depth","ESP Depth",
-        "Well Type","Measured Pwf (kPa)","Injection-Point Tubing Pressure (kPa)",
+      append("Well Test ", [[
+        "Well Name","Field","Well Type","Date"," Rate","WC%","WC","1-WC","THP","FLP","PIP","PDP","Freq","Pr ","Perf. Depth ","ESP Depth",
+        "Measured Pwf (kPa)","Injection-Point Tubing Pressure (kPa)",
         "Reference MD (m)","Target MD (m)","Flowing Pressure Gradient (kPa/m MD)"
       ]]);
-      const sheet = workbook.Sheets["Well Test"];
+      const sheet = workbook.Sheets["Well Test "];
       sheet["!cols"] = XLSX.utils.sheet_to_json(sheet, {header:1})[0].map((label) => ({wch:Math.max(12, label.length + 2)}));
-      XLSX.utils.sheet_add_aoa(sheet, Array.from({length:19}, () => ["",""]), {origin:"E2"});
+      XLSX.utils.sheet_add_aoa(sheet, Array.from({length:19}, () => ["",""]), {origin:"G2"});
       for (let row = 2; row <= 20; row++) {
-        sheet[`E${row}`].f = `IF(D${row}="","",D${row}/100)`;
-        sheet[`F${row}`].f = `IF(E${row}="","",1-E${row})`;
+        sheet[`G${row}`].f = `IF(F${row}="","",F${row}/100)`;
+        sheet[`H${row}`].f = `IF(G${row}="","",1-G${row})`;
       }
       appendLabels("Deviation", ["True Vertical Depth (TVD) [m]","Total Measured Depth (MD) [m]","Max Inclination (Degrees)"]);
       appendLabels("Perforation", ["Top Perforation TVD [m]","Bottom Perforation TVD [m]","Shot Density (Shots/Foot, SPF)","Perforation Phasing Angle"]);

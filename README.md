@@ -14,7 +14,7 @@ python -m http.server 8000
 
 Then open `http://localhost:8000`. The dashboard includes demo data; use **Upload Excel** to load a workbook.
 
-The **Excel template** uses seven sheets, with input rows on **Well Test**. Use `Well Name`, `Date`, `Well Test Rate` (total liquid in m³/day), `BSW%` (enter `25` for 25%), and `Pr` (kPa). PetroPI calculates water rate as total liquid × BSW% / 100 and oil rate as the remainder; it does not depend on Excel's calculated `BSW` or `1-BSW` cells. The other sheets are reference information and do not supply test inputs automatically.
+The **Excel template** matches the seven-sheet `PetroPI-1.xlsx` layout, with test inputs on **Well Test**. It keeps the original columns in order, including `Field`, `Well Type`, `Rate` (total liquid in m³/day), and `WC%` (enter `25` for 25%). PetroPI calculates water rate as total liquid × WC% / 100 and oil rate as the remainder; it does not depend on Excel's calculated `WC` or `1-WC` cells. Older workbooks with `Well Test Rate` and `BSW%` still work. The other sheets are reference information and do not supply test inputs automatically.
 
 Workbooks with separate `Oil Rate` and `Water Rate` columns still work with `Well`, `Date`, `Pr`, and measured Pwf or the estimation columns below. `Field` and `Gas Rate` are optional. The dashboard scans the first 50 rows of worksheets for matching headers and reads `.xlsx`, `.xls`, and `.xlsm` (macros are not run).
 
