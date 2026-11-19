@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b2e4f">
+  <title>PetroPI | Production &amp; Reservoir Surveillance</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --navy: #0b2e4f;
+      --blue: #1f5d99;
+      --ink: #172b3a;
+      --muted: #647789;
+      --line: #dce5ec;
+      --canvas: #f3f6fa;
+      --white: #fff;
+      --good-bg: #dcfce7;
+      --good: #166534;
+      --warn-bg: #fef3c7;
+      --warn: #92400e;
+      --bad-bg: #fee2e2;
+      --bad: #991b1b;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--canvas); }
+    .app-ribbon {
+      display: flex; align-items: center; justify-content: space-between; gap: 18px;
+      padding: 14px max(22px, calc((100% - 1440px) / 2)); color: var(--white);
+      background: var(--navy);
+    }
+    .brand { font-size: 19px; font-weight: 750; letter-spacing: .01em; }
+    .tagline { color: #d9e7f2; font-size: 13px; }
+    main { max-width: 1440px; margin: auto; padding: 26px 22px 40px; }
+    .page-heading { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 20px; }
+    h1 { margin: 0 0 5px; font-size: clamp(24px, 3vw, 32px); letter-spacing: -.03em; }
+    h2 { margin: 0; font-size: 16px; }
+    p { margin: 0; }
+    .subtle { color: var(--muted); font-size: 13px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; }
+    button, .upload-button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      min-height: 40px; padding: 9px 13px; border: 1px solid var(--blue); border-radius: 9px;
+      color: #fff; background: var(--blue); font: inherit; font-size: 13px; font-weight: 650;
+      cursor: pointer; text-decoration: none;
+    }
+    button.secondary, .upload-button.secondary { color: var(--navy); background: #fff; border-color: var(--line); }
+    button:hover, .upload-button:hover { filter: brightness(.96); }
+    button:focus-visible, input:focus-visible, select:focus-visible, .upload-button:focus-within {
+      outline: 3px solid #93c5fd; outline-offset: 2px;
+    }
+    .upload-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+    .panel, .card, .chart-panel {
+      border: 1px solid #e7edf2; border-radius: 14px; background: var(--white);
+      box-shadow: 0 3px 12px rgb(15 41 61 / 5%);
+    }
+    .filters { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 12px; padding: 16px; margin-bottom: 16px; }
+    .filter { display: grid; gap: 6px; }
+    label { color: #526779; font-size: 11px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
+    select, input[type="date"] {
+      width: 100%; min-height: 39px; padding: 8px 10px; border: 1px solid #cfdae3;
+      border-radius: 8px; color: var(--ink); background: #fff; font: inherit; font-size: 13px;
+    }
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(170px, 1fr)); gap: 13px; margin-bottom: 16px; }
+    .card { padding: 17px; }
+    .card-header { display: flex; align-items: center; gap: 13px; min-height: 73px; }
+    .card-icon {
+      display: flex; flex: 0 0 52px; width: 52px; height: 52px; align-items: center; justify-content: center;
+      border-radius: 13px; color: #fff; background: linear-gradient(135deg, var(--blue), var(--navy)); font-size: 25px;
+    }
+    .kpi-label { margin-bottom: 3px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    .metric { color: var(--navy); font-size: clamp(22px, 2vw, 29px); font-weight: 760; letter-spacing: -.035em; line-height: 1.15; }
+    .unit { margin-left: 3px; color: var(--muted); font-size: 11px; font-weight: 550; letter-spacing: 0; }
+    .trend {
+      display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; padding: 5px 9px;
+      border-radius: 999px; font-size: 11px; font-weight: 700;
+    }
+    .trend-good { color: var(--good); background: var(--good-bg); }
+    .trend-warning { color: var(--warn); background: var(--warn-bg); }
+    .trend-danger { color: var(--bad); background: var(--bad-bg); }
+    .trend-muted { color: #475569; background: #e8edf2; }
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .chart-panel { min-width: 0; padding: 17px; }
+    .chart-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .chart-heading p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .chart { min-height: 245px; overflow: hidden; }
+    .chart svg { display: block; width: 100%; height: 245px; overflow: visible; }
+    .chart-empty { display: grid; min-height: 220px; place-items: center; color: var(--muted); font-size: 13px; text-align: center; }
+    .table-panel { overflow: hidden; }
+    .table-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 12px; }
+    th, td { padding: 11px 14px; border-bottom: 1px solid #edf1f4; text-align: left; }
+    th { color: #526779; background: #f8fafc; font-size: 10px; letter-spacing: .045em; text-transform: uppercase; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .quality { font-weight: 700; }
+    .notice { margin: 13px 0 0; min-height: 18px; color: var(--muted); font-size: 12px; }
+    .notice.error { color: var(--bad); }
+    .footer { margin-top: 13px; color: var(--muted); font-size: 11px; }
+    @media (max-width: 1050px) {
+      .kpi-grid { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+      .filters { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+    }
+    @media (max-width: 700px) {
+      main { padding: 20px 14px 30px; }
+      .app-ribbon { align-items: flex-start; flex-direction: column; gap: 3px; padding: 13px 16px; }
+      .page-heading { align-items: flex-start; flex-direction: column; }
+      .filters { grid-template-columns: repeat(2, minmax(120px, 1fr)); padding: 13px; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(135px, 1fr)); gap: 9px; }
+      .card { padding: 12px; }
+      .card-header { gap: 9px; }
+      .card-icon { flex-basis: 43px; width: 43px; height: 43px; font-size: 21px; }
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 390px) { .kpi-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="app-ribbon">
+    <div class="brand">🛢 PetroPI</div>
+    <div class="tagline">Production &amp; Reservoir Surveillance</div>
+  </div>
+  <main>
+    <div class="page-heading">
+      <div>
+        <h1>Well performance</h1>
+        <p class="subtle">Surveillance overview <span aria-hidden="true">·</span> Pressure kPa <span aria-hidden="true">·</span> Rates m³/day</p>
+      </div>
+      <div class="actions">
+        <label class="upload-button" for="xlsxFile">Upload XLSX<input id="xlsxFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+        <button id="exportXlsx" class="secondary" type="button">Export filtered XLSX</button>
+        <button id="exportQuality" class="secondary" type="button">Validation report XLSX</button>
+      </div>
+    </div>
+
+    <section class="filters panel" aria-label="Dashboard filters">
+      <div class="filter"><label for="fieldFilter">Field</label><select id="fieldFilter"><option value="">All fields</option></select></div>
+      <div class="filter"><label for="wellFilter">Well</label><select id="wellFilter"><option value="">All wells</option></select></div>
+      <div class="filter"><label for="startDate">From date</label><input id="startDate" type="date"></div>
+      <div class="filter"><label for="endDate">To date</label><input id="endDate" type="date"></div>
+      <div class="filter"><label for="sortOrder">Latest test</label><select id="sortOrder"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select></div>
+    </section>
+
+    <section class="kpi-grid" aria-label="Key performance indicators">
+      <article class="card"><div class="card-header"><div class="card-icon" aria-hidden="true">🛢</div><div><div class="kpi-label">Wells in view</div><div id="wellsMetric" class="metric">—</div><div id="wellsTrend" class="trend trend-muted">No data</div></div></div></article>
+      <article class="card"><div class="card-header"><div class="card-icon" aria-hidden="true">📈</div><div><div class="kpi-label">Average PI</div><div id="piMetric" class="metric">—</div><div id="piTrend" class="trend trend-muted">No data</div></div></div></article>
+      <article class="card"><div class="card-header"><div class="card-icon" aria-hidden="true">🌡</div><div><div class="kpi-label">Avg. reservoir pressure</div><div id="pressureMetric" class="metric">—</div><div id="pressureTrend" class="trend trend-muted">No data</div></div></div></article>
+      <article class="card"><div class="card-header"><div class="card-icon" aria-hidden="true">🚀</div><div><div class="kpi-label">Average qmax</div><div id="qmaxMetric" class="metric">—</div><div id="qmaxTrend" class="trend trend-muted">No data</div></div></div></article>
+      <article class="card"><div class="card-header"><div class="card-icon" aria-hidden="true">💧</div><div><div class="kpi-label">Average water cut</div><div id="waterCutMetric" class="metric">—</div><div id="waterCutTrend" class="trend trend-muted">No data</div></div></div></article>
+      <article class="card"><div class="card-header"><div class="card-icon" aria-hidden="true">✅</div><div><div class="kpi-label">Data quality</div><div id="qualityMetric" class="metric">—</div><div id="qualityTrend" class="trend trend-muted">No rows</div></div></div></article>
+    </section>
+
+    <section class="chart-grid" aria-label="Performance charts">
+      <article class="chart-panel">
+        <div class="chart-heading"><div><h2>Productivity index by well</h2><p>Latest valid test in the selected date range</p></div></div>
+        <div id="piChart" class="chart" role="img" aria-label="Productivity index by well chart"></div>
+      </article>
+      <article class="chart-panel">
+        <div class="chart-heading"><div><h2>qmax history</h2><p>Vogel potential by test date</p></div></div>
+        <div id="qmaxChart" class="chart" role="img" aria-label="qmax history chart"></div>
+      </article>
+    </section>
+
+    <section class="chart-panel table-panel" aria-label="Well test records">
+      <div class="table-heading"><div><h2>Well test data</h2><p id="rowSummary" class="subtle" style="margin-top:4px">—</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Well</th><th>Field</th><th>Date</th><th>Oil rate</th><th>Water rate</th><th>Water cut</th><th>Pr (kPa)</th><th>Pwf (kPa)</th><th>PI</th><th>qmax</th><th>Quality</th></tr></thead>
+          <tbody id="dataRows"></tbody>
+        </table>
+      </div>
+    </section>
+    <p id="notice" class="notice" role="status" aria-live="polite"></p>
+    <p class="footer">Demo values are illustrative. PI uses liquid rate / (Pr − Pwf); qmax uses the Vogel IPR relationship. Validate engineering assumptions before operational use.</p>
+  </main>
+
+  <script src="./xlsx.full.min.js"></script>
+  <script>
+    "use strict";
+    const demoRows = [
+      {well:"W01",field:"North",date:"2026-01-01",oil:120,water:30,gas:0,pr:22000,pwf:18000},
+      {well:"W01",field:"North",date:"2026-06-01",oil:133,water:29,gas:0,pr:21600,pwf:17600},
+      {well:"W02",field:"North",date:"2026-01-12",oil:145,water:48,gas:0,pr:23500,pwf:19000},
+      {well:"W02",field:"North",date:"2026-06-12",oil:138,water:55,gas:0,pr:22900,pwf:18600},
+      {well:"W03",field:"South",date:"2026-02-05",oil:160,water:28,gas:0,pr:24500,pwf:20500},
+      {well:"W03",field:"South",date:"2026-07-05",oil:172,water:26,gas:0,pr:24000,pwf:19800},
+      {well:"W04",field:"East",date:"2026-03-20",oil:98,water:70,gas:0,pr:21000,pwf:18400}
+    ];
+    let rows = [];
+    let sourceName = "demo dataset";
+    const $ = (id) => document.getElementById(id);
+    const numberFormat = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
+    const aliases = {
+      well:["well","well name","well_name"], field:["field","asset","area"],
+      date:["date","test date","test_date"], oil:["oil rate","oil rate (m3/day)","oil_rate","qo","oil"],
+      water:["water rate","water rate (m3/day)","water_rate","qw","water"],
+      gas:["gas rate","gas rate (sm3/day)","gas_rate","qg","gas"],
+      pr:["pr","reservoir pressure","reservoir pressure (kpa)","average reservoir pressure","pressure"],
+      pwf:["pwf","flowing pressure","flowing bottomhole pressure","bottomhole flowing pressure"]
+    };
+
+    function normalizeHeader(value) {
+      return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+    }
+    function parseWorkbook(workbook) {
+      if (!workbook.SheetNames.length) throw new Error("Workbook contains no worksheets.");
+      const sheetName = workbook.SheetNames.includes("WellTests") ? "WellTests" : workbook.SheetNames[0];
+      const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {header:1, raw:true, defval:""})
+        .filter((line) => line.some((value) => String(value).trim() !== ""));
+      if (matrix.length < 2) throw new Error(`Worksheet "${sheetName}" must contain a header and at least one data row.`);
+      const headers = matrix[0].map(normalizeHeader);
+      const indexes = {};
+      for (const [key, names] of Object.entries(aliases)) {
+        indexes[key] = headers.findIndex((header) => names.map(normalizeHeader).includes(header));
+      }
+      for (const required of ["well", "field", "date", "oil", "water", "pr", "pwf"]) {
+        if (indexes[required] === -1) throw new Error(`Missing required column in "${sheetName}": ${aliases[required][0]}.`);
+      }
+      return matrix.slice(1).map((cells) => ({
+        well: String(cells[indexes.well] || "").trim(),
+        field: String(cells[indexes.field] || "").trim(),
+        date: normalizeWorkbookDate(cells[indexes.date]),
+        oil: parseNumeric(cells[indexes.oil]),
+        water: parseNumeric(cells[indexes.water]),
+        gas: indexes.gas === -1 ? 0 : parseNumeric(cells[indexes.gas]),
+        pr: parseNumeric(cells[indexes.pr]),
+        pwf: parseNumeric(cells[indexes.pwf])
+      }));
+    }
+    function normalizeWorkbookDate(value) {
+      if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+      if (typeof value === "number" && window.XLSX) {
+        const parts = XLSX.SSF.parse_date_code(value);
+        if (parts) return `${String(parts.y).padStart(4,"0")}-${String(parts.m).padStart(2,"0")}-${String(parts.d).padStart(2,"0")}`;
+      }
+      return normalizeDate(value);
+    }
+    function parseNumeric(value) {
+      const clean = String(value ?? "").trim().replace(/,/g, "");
+      if (clean === "") return NaN;
+      return Number(clean);
+    }
+    function normalizeDate(value) {
+      const text = String(value || "").trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+      const parsed = new Date(text);
+      return Number.isNaN(parsed.getTime()) ? text : parsed.toISOString().slice(0, 10);
+    }
+    function analyze(row) {
+      const reasons = [];
+      if (!row.well) reasons.push("Missing well");
+      if (!row.field) reasons.push("Missing field");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date) || Number.isNaN(Date.parse(row.date))) reasons.push("Invalid date");
+      if (![row.oil,row.water,row.gas,row.pr,row.pwf].every(Number.isFinite)) reasons.push("Missing or invalid numeric value");
+      if ([row.oil,row.water,row.gas].some((v) => v < 0)) reasons.push("Negative rate");
+      if (!(row.pr > 0) || !(row.pwf >= 0) || !(row.pr > row.pwf)) reasons.push("Require Pr > Pwf ≥ 0");
+      const valid = reasons.length === 0;
+      const drawdown = valid ? row.pr - row.pwf : NaN;
+      const liquid = valid ? row.oil + row.water : NaN;
+      const pi = valid && drawdown > 0 ? liquid / drawdown : NaN;
+      const ratio = valid ? row.pwf / row.pr : NaN;
+      const denominator = 1 - 0.2 * ratio - 0.8 * ratio * ratio;
+      const qmax = valid && denominator > 0 ? row.oil / denominator : NaN;
+      const waterCut = valid && liquid > 0 ? row.water / liquid * 100 : (valid ? 0 : NaN);
+      if (valid && (!Number.isFinite(pi) || !Number.isFinite(qmax))) reasons.push("Calculation unavailable");
+      return {...row, pi, qmax, waterCut, valid: reasons.length === 0, reasons};
+    }
+    function fmt(value, digits = 2) {
+      return Number.isFinite(value) ? new Intl.NumberFormat(undefined, {maximumFractionDigits:digits, minimumFractionDigits:digits}).format(value) : "—";
+    }
+    function setBadge(id, text, cls) {
+      const el = $(id);
+      el.className = `trend ${cls}`;
+      el.textContent = text;
+    }
+    function setMetricTrend(id, change, thresholds, unit = "%") {
+      if (!Number.isFinite(change)) { setBadge(id, "No prior test", "trend-muted"); return; }
+      let cls = "trend-warning", icon = "■";
+      if (change >= thresholds.good) { cls = "trend-good"; icon = "▲"; }
+      else if (change <= thresholds.bad) { cls = "trend-danger"; icon = "▼"; }
+      setBadge(id, `${icon} ${change > 0 ? "+" : ""}${fmt(change, 1)}${unit} vs previous`, cls);
+    }
+    function latestPerWell(list) {
+      const map = new Map();
+      for (const row of list.filter((r) => r.valid).sort((a,b) => a.date.localeCompare(b.date))) map.set(row.well, row);
+      return [...map.values()];
+    }
+    function average(list, key) {
+      const values = list.map((r) => r[key]).filter(Number.isFinite);
+      return values.length ? values.reduce((a,b) => a+b, 0) / values.length : NaN;
+    }
+    function trendAcrossWells(list, key, thresholds, mode = "higher-is-better") {
+      const latest = latestPerWell(list);
+      const changes = [];
+      for (const current of latest) {
+        const history = list.filter((r) => r.valid && r.well === current.well).sort((a,b) => a.date.localeCompare(b.date));
+        if (history.length > 1) {
+          const previous = history[history.length - 2][key];
+          const now = current[key];
+          if (Number.isFinite(previous) && Number.isFinite(now) && previous !== 0) {
+            changes.push((mode === "decline" ? previous - now : now - previous) / Math.abs(previous) * 100);
+          }
+        }
+      }
+      const change = changes.length ? changes.reduce((a,b) => a+b, 0) / changes.length : NaN;
+      if (mode === "decline") {
+        const cls = change < 10 ? "trend-good" : change <= 25 ? "trend-warning" : "trend-danger";
+        const icon = change < 10 ? "🟢" : change <= 25 ? "🟡" : "🔴";
+        setBadge("pressureTrend", Number.isFinite(change) ? `${icon} ${fmt(change,1)}% decline vs previous` : "No prior test", Number.isFinite(change) ? cls : "trend-muted");
+        return;
+      }
+      setMetricTrend(key === "pi" ? "piTrend" : "qmaxTrend", change, thresholds);
+    }
+    function visibleRows() {
+      const field = $("fieldFilter").value, well = $("wellFilter").value;
+      const start = $("startDate").value, end = $("endDate").value;
+      return rows.map(analyze).filter((r) =>
+        (!field || r.field === field) && (!well || r.well === well) &&
+        (!start || r.date >= start) && (!end || r.date <= end)
+      ).sort((a,b) => $("sortOrder").value === "latest" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date));
+    }
+    function updateSelects() {
+      const fieldSelect = $("fieldFilter"), wellSelect = $("wellFilter");
+      const previousField = fieldSelect.value, previousWell = wellSelect.value;
+      fillSelect(fieldSelect, "All fields", [...new Set(rows.map((r) => r.field).filter(Boolean))].sort(), previousField);
+      fillSelect(wellSelect, "All wells", [...new Set(rows.filter((r) => !fieldSelect.value || r.field === fieldSelect.value).map((r) => r.well).filter(Boolean))].sort(), previousWell);
+    }
+    function fillSelect(select, label, values, previous) {
+      select.replaceChildren(new Option(label, ""));
+      for (const value of values) select.add(new Option(value, value));
+      if (values.includes(previous)) select.value = previous;
+    }
+    function render() {
+      updateSelects();
+      const filtered = visibleRows();
+      const valid = filtered.filter((r) => r.valid);
+      const latest = latestPerWell(valid);
+      $("wellsMetric").textContent = numberFormat.format(latest.length);
+      $("piMetric").innerHTML = `${fmt(average(latest, "pi"), 4)}<span class="unit">m³/day/kPa</span>`;
+      $("pressureMetric").innerHTML = `${fmt(average(latest, "pr"), 0)}<span class="unit">kPa</span>`;
+      $("qmaxMetric").innerHTML = `${fmt(average(latest, "qmax"), 1)}<span class="unit">m³/day</span>`;
+      const waterCut = average(latest, "waterCut");
+      $("waterCutMetric").textContent = Number.isFinite(waterCut) ? `${fmt(waterCut,1)}%` : "—";
+      const quality = filtered.length ? valid.length / filtered.length * 100 : NaN;
+      $("qualityMetric").textContent = Number.isFinite(quality) ? `${fmt(quality, 0)}%` : "—";
+      setBadge("wellsTrend", `${filtered.length} test${filtered.length === 1 ? "" : "s"} in view`, "trend-muted");
+      trendAcrossWells(valid, "pi", {good:5,bad:-10});
+      trendAcrossWells(valid, "pr", {}, "decline");
+      trendAcrossWells(valid, "qmax", {good:5,bad:-15});
+      if (Number.isFinite(waterCut)) {
+        setBadge("waterCutTrend", waterCut < 50 ? "🟢 Low water cut" : waterCut <= 80 ? "🟡 Moderate water cut" : "🔴 High water cut",
+          waterCut < 50 ? "trend-good" : waterCut <= 80 ? "trend-warning" : "trend-danger");
+      } else setBadge("waterCutTrend", "No valid data", "trend-muted");
+      setBadge("qualityTrend", Number.isFinite(quality) ? (quality >= 95 ? "🟢 Excellent" : quality >= 80 ? "🟡 Review records" : "🔴 Needs attention") : "No rows",
+        Number.isFinite(quality) ? (quality >= 95 ? "trend-good" : quality >= 80 ? "trend-warning" : "trend-danger") : "trend-muted");
+      renderTable(filtered);
+      renderBarChart("piChart", latest, "pi", "m³/day/kPa", "#1f5d99", 4);
+      const history = valid.slice().sort((a,b) => a.date.localeCompare(b.date));
+      renderLineChart("qmaxChart", history, "qmax", "m³/day", "#0f766e", 1);
+      $("rowSummary").textContent = `${filtered.length} test${filtered.length === 1 ? "" : "s"} · ${valid.length} valid · ${filtered.length-valid.length} flagged · ${sourceName}`;
+    }
+    function renderTable(list) {
+      const tbody = $("dataRows");
+      tbody.replaceChildren();
+      for (const r of list) {
+        const tr = document.createElement("tr");
+        const values = [r.well || "—", r.field || "—", r.date || "—", fmt(r.oil,1), fmt(r.water,1),
+          Number.isFinite(r.waterCut) ? `${fmt(r.waterCut,1)}%` : "—", fmt(r.pr,0), fmt(r.pwf,0), fmt(r.pi,4), fmt(r.qmax,1)];
+        for (const value of values) { const td = document.createElement("td"); td.textContent = value; tr.append(td); }
+        const quality = document.createElement("td");
+        quality.className = `quality ${r.valid ? "trend-good" : "trend-danger"}`;
+        quality.textContent = r.valid ? "Valid" : r.reasons.join("; ");
+        quality.title = r.reasons.join("; ");
+        tr.append(quality); tbody.append(tr);
+      }
+      if (!list.length) {
+        const tr = document.createElement("tr"), td = document.createElement("td");
+        td.colSpan = 11; td.textContent = "No tests match the selected filters."; td.className = "subtle";
+        tr.append(td); tbody.append(tr);
+      }
+    }
+    function svgEl(tag, attrs = {}) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [key,value] of Object.entries(attrs)) el.setAttribute(key, value);
+      return el;
+    }
+    function renderBarChart(id, data, key, unit, color, digits) {
+      const root = $(id); root.replaceChildren();
+      const values = data.filter((r) => Number.isFinite(r[key])).sort((a,b) => a[key]-b[key]);
+      if (!values.length) { root.innerHTML = '<div class="chart-empty">No valid tests to chart for this selection.</div>'; return; }
+      const width = 620, height = 245, left = 48, right = 18, top = 14, bottom = 45;
+      const max = Math.max(...values.map((r) => r[key])) * 1.12 || 1;
+      const plotH = height - top - bottom, plotW = width - left - right;
+      const svg = svgEl("svg", {viewBox:`0 0 ${width} ${height}`, role:"presentation"});
+      for (let i=0;i<4;i++) {
+        const y = top + plotH * i / 3;
+        svg.append(svgEl("line",{x1:left,y1:y,x2:width-right,y2:y,stroke:"#e8eef3","stroke-width":"1"}));
+        const label = svgEl("text",{x:left-8,y:y+4,"text-anchor":"end",fill:"#718395","font-size":"10"});
+        label.textContent = fmt(max*(1-i/3),digits); svg.append(label);
+      }
+      const band = plotW / values.length, barW = Math.min(42, band * .58);
+      values.forEach((r,i) => {
+        const h = r[key] / max * plotH, x = left + i*band + (band-barW)/2, y = top + plotH - h;
+        svg.append(svgEl("rect",{x,y,width:barW,height:h,rx:5,fill:color}));
+        const name = svgEl("text",{x:x+barW/2,y:height-22,"text-anchor":"middle",fill:"#526779","font-size":"10"});
+        name.textContent = r.well.length > 9 ? `${r.well.slice(0,8)}…` : r.well; svg.append(name);
+      });
+      root.append(svg);
+    }
+    function renderLineChart(id, data, key, unit, color, digits) {
+      const root = $(id); root.replaceChildren();
+      const values = data.filter((r) => Number.isFinite(r[key]));
+      if (!values.length) { root.innerHTML = '<div class="chart-empty">No valid tests to chart for this selection.</div>'; return; }
+      const width = 620, height = 245, left = 48, right = 18, top = 14, bottom = 45;
+      const min = Math.min(...values.map((r) => r[key])), maxRaw = Math.max(...values.map((r) => r[key]));
+      const span = maxRaw-min || Math.max(maxRaw*.1,1), low = Math.max(0,min-span*.12), high = maxRaw+span*.12;
+      const plotH=height-top-bottom, plotW=width-left-right;
+      const xAt=(i)=>values.length===1 ? left+plotW/2 : left+i*plotW/(values.length-1);
+      const yAt=(v)=>top+(high-v)/(high-low)*plotH;
+      const svg=svgEl("svg",{viewBox:`0 0 ${width} ${height}`,role:"presentation"});
+      for(let i=0;i<4;i++){
+        const value=high-(high-low)*i/3, y=yAt(value);
+        svg.append(svgEl("line",{x1:left,y1:y,x2:width-right,y2:y,stroke:"#e8eef3","stroke-width":"1"}));
+        const label=svgEl("text",{x:left-8,y:y+4,"text-anchor":"end",fill:"#718395","font-size":"10"});
+        label.textContent=fmt(value,digits); svg.append(label);
+      }
+      const points=values.map((r,i)=>`${xAt(i)},${yAt(r[key])}`).join(" ");
+      svg.append(svgEl("polyline",{points,fill:"none",stroke:color,"stroke-width":"3","stroke-linecap":"round","stroke-linejoin":"round"}));
+      values.forEach((r,i)=>{
+        const x=xAt(i),y=yAt(r[key]);
+        svg.append(svgEl("circle",{cx:x,cy:y,r:4,fill:"#fff",stroke:color,"stroke-width":"2"}));
+        const date=svgEl("text",{x,y:height-22,"text-anchor":"middle",fill:"#526779","font-size":"10"});
+        date.textContent=r.date.slice(0,7); svg.append(date);
+      });
+      root.append(svg);
+    }
+    function downloadWorkbook(filename, sheetName, rows) {
+      if (!window.XLSX) throw new Error("The bundled XLSX library is unavailable.");
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName);
+      XLSX.writeFile(workbook, filename, {compression:true});
+    }
+    $("xlsxFile").addEventListener("change", async (event) => {
+      const file = event.target.files[0]; if (!file) return;
+      try {
+        const workbook = XLSX.read(await file.arrayBuffer(), {type:"array", cellDates:true});
+        const imported = parseWorkbook(workbook);
+        if (!imported.length) throw new Error("Workbook has no data rows.");
+        rows = imported; sourceName = file.name; $("fieldFilter").value = ""; $("wellFilter").value = "";
+        $("startDate").value = ""; $("endDate").value = "";
+        $("notice").className = "notice"; $("notice").textContent = `Loaded ${rows.length} records from ${file.name}. Invalid records are shown with validation reasons.`;
+        render();
+      } catch (error) {
+        $("notice").className = "notice error"; $("notice").textContent = `Could not load XLSX: ${error.message}`;
+      } finally { event.target.value = ""; }
+    });
+    $("exportXlsx").addEventListener("click", () => {
+      const data = visibleRows();
+      const header = ["Well","Field","Date","Oil Rate (m3/day)","Water Rate (m3/day)","Gas Rate (Sm3/day)","Pr (kPa)","Pwf (kPa)","Water Cut (%)","PI (m3/day/kPa)","qmax (m3/day)","Valid","Validation"];
+      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.pwf,r.waterCut,r.pi,r.qmax,r.valid,r.reasons.join("; ")]);
+      downloadWorkbook("petropi-filtered-tests.xlsx", "WellTests", [header,...body]);
+    });
+    $("exportQuality").addEventListener("click", () => {
+      const data = visibleRows();
+      const header = ["Well","Field","Date","Valid","Validation issues"];
+      const body = data.map((r)=>[r.well,r.field,r.date,r.valid,r.reasons.join("; ")]);
+      downloadWorkbook("petropi-validation-report.xlsx", "Validation", [header,...body]);
+    });
+    $("fieldFilter").addEventListener("change", () => { $("wellFilter").value=""; render(); });
+    ["wellFilter","startDate","endDate","sortOrder"].forEach((id)=>$(id).addEventListener("change",render));
+    rows = demoRows;
+    render();
+  </script>
+</body>
+</html>
