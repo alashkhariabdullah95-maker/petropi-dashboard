@@ -18,6 +18,8 @@ The **Excel template** matches the seven-sheet `PetroPI-1.xlsx` layout, with tes
 
 Workbooks with separate `Oil Rate` and `Water Rate` columns still work with `Well`, `Date`, `Pr`, and measured Pwf or the estimation columns below. `Field` and `Gas Rate` are optional. The dashboard scans the first 50 rows of worksheets for matching headers and reads `.xlsx`, `.xls`, and `.xlsm` (macros are not run).
 
+**Productivity index (PI)** is gross liquid rate divided by drawdown (`Pr − Pwf`), in m³/day/kPa. PetroPI uses the workbook's `Rate` directly (or `Well Test Rate` in the older template). For workbooks with only separate oil and water rates, gross rate is their sum. The table and filtered export show the gross rate used. Vogel qmax still uses the oil rate.
+
 ## Flowing bottomhole pressure (Pwf)
 
 The Pwf columns are to the right of `ESP Depth` on **Well Test**. Leave `Measured Pwf (kPa)` blank to estimate it. On each row, provide `Well Type`, `Target MD (m)`, `Flowing Pressure Gradient (kPa/m MD)`, and the applicable reference:

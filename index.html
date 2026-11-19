@@ -167,7 +167,7 @@
       <div class="table-heading"><div><h2>Well test data</h2><p id="rowSummary" class="subtle" style="margin-top:4px">—</p></div></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Well</th><th>Type</th><th>Field</th><th>Date</th><th>Oil rate</th><th>Water rate</th><th>Water cut</th><th>Pr (kPa)</th><th>Pwf (kPa)</th><th>Pwf source</th><th>PI</th><th>qmax</th><th>Quality</th></tr></thead>
+          <thead><tr><th>Well</th><th>Type</th><th>Field</th><th>Date</th><th>Gross rate (m³/day)</th><th>Oil rate</th><th>Water rate</th><th>Water cut</th><th>Pr (kPa)</th><th>Pwf (kPa)</th><th>Pwf source</th><th>PI</th><th>qmax</th><th>Quality</th></tr></thead>
           <tbody id="dataRows"></tbody>
         </table>
       </div>
@@ -222,7 +222,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       date:["date","test date","test_date","well test date","test datetime"],
       oil:["oil rate","oil rate (m3/day)","oil rate (m3/d)","oil_rate","qo","oil production rate","oil"],
       water:["water rate","water rate (m3/day)","water rate (m3/d)","water_rate","qw","water production rate","water"],
-      liquid:["well test rate","well test rate (m3/day)","total liquid rate (m3/day)","rate (m3/day)"],
+      liquid:["gross rate (m3/day)","gross rate","well test rate","well test rate (m3/day)","total liquid rate (m3/day)","rate (m3/day)"],
       waterCutPercent:["wc percent","wc percentage","water cut percent","water cut percentage","bsw percent","bsw percentage"],
       gas:["gas rate","gas rate (sm3/day)","gas rate (sm3/d)","gas_rate","qg","gas production rate","gas"],
       pr:["pr","pr (kpa)","reservoir pressure","reservoir pressure (kpa)","average reservoir pressure","initial reservoir pressure","pressure"],
@@ -298,6 +298,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           date: normalizeWorkbookDate(cells[indexes.date]),
           ...(useLiquidSplit ? splitLiquidRate(cells[indexes.liquid], cells[indexes.waterCutPercent]) :
             {oil:parseNumeric(cells[indexes.oil]), water:parseNumeric(cells[indexes.water])}),
+          grossRate: indexes.liquid === -1 ? undefined : parseNumeric(cells[indexes.liquid]),
           gas: indexes.gas === -1 ? 0 : parseNumeric(cells[indexes.gas]),
           pr: parseNumeric(cells[indexes.pr]),
           ...Object.fromEntries(pwfInputs.map(([key]) => [key, cells[indexes[key]] ?? ""]))
@@ -363,10 +364,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
     function analyze(row) {
       const reasons = [];
+      const grossRate = row.grossRate ?? (row.oil + row.water);
       if (!row.well) reasons.push("Missing well");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date) || Number.isNaN(Date.parse(row.date))) reasons.push("Invalid date");
       if (row.rateIssue) reasons.push(row.rateIssue);
       else if (![row.oil,row.water].every(Number.isFinite)) reasons.push("Missing or invalid oil or water rate");
+      else if (!Number.isFinite(grossRate) || grossRate < 0) reasons.push("Supply nonnegative Gross Rate (m3/day)");
       if (!Number.isFinite(row.gas)) reasons.push("Invalid gas rate");
       if ([row.oil,row.water,row.gas].some((v) => v < 0)) reasons.push("Negative rate");
       const wellType = String(row.wellType ?? "").trim().toUpperCase();
@@ -376,13 +379,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       const valid = reasons.length === 0;
       const drawdown = valid ? row.pr - pwf : NaN;
       const liquid = valid ? row.oil + row.water : NaN;
-      const pi = valid && drawdown > 0 ? liquid / drawdown : NaN;
+      const pi = valid && drawdown > 0 ? grossRate / drawdown : NaN;
       const ratio = valid ? pwf / row.pr : NaN;
       const denominator = 1 - 0.2 * ratio - 0.8 * ratio * ratio;
       const qmax = valid && denominator > 0 ? row.oil / denominator : NaN;
       const waterCut = valid && liquid > 0 ? row.water / liquid * 100 : (valid ? 0 : NaN);
       if (valid && (!Number.isFinite(pi) || !Number.isFinite(qmax))) reasons.push("Calculation unavailable");
-      return {...row, wellType, measuredPwf:row.pwf, pwf, pwfSource, pi, qmax, waterCut, valid: reasons.length === 0, reasons};
+      return {...row, grossRate, wellType, measuredPwf:row.pwf, pwf, pwfSource, pi, qmax, waterCut, valid: reasons.length === 0, reasons};
     }
     function fmt(value, digits = 2) {
       return Number.isFinite(value) ? new Intl.NumberFormat(undefined, {maximumFractionDigits:digits, minimumFractionDigits:digits}).format(value) : "—";
@@ -483,7 +486,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       tbody.replaceChildren();
       for (const r of list) {
         const tr = document.createElement("tr");
-        const values = [r.well || "—", r.wellType || "—", r.field || "—", r.date || "—", fmt(r.oil,1), fmt(r.water,1),
+        const values = [r.well || "—", r.wellType || "—", r.field || "—", r.date || "—", fmt(r.grossRate,1), fmt(r.oil,1), fmt(r.water,1),
           Number.isFinite(r.waterCut) ? `${fmt(r.waterCut,1)}%` : "—", fmt(r.pr,0), fmt(r.pwf,1), r.pwfSource, fmt(r.pi,4), fmt(r.qmax,1)];
         for (const value of values) { const td = document.createElement("td"); td.textContent = value; tr.append(td); }
         const quality = document.createElement("td");
@@ -494,7 +497,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
       if (!list.length) {
         const tr = document.createElement("tr"), td = document.createElement("td");
-        td.colSpan = 13; td.textContent = "No tests match the selected filters."; td.className = "subtle";
+        td.colSpan = 14; td.textContent = "No tests match the selected filters."; td.className = "subtle";
         tr.append(td); tbody.append(tr);
       }
     }
@@ -599,8 +602,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     });
     $("exportXlsx").addEventListener("click", () => {
       const data = visibleRows();
-      const header = [...testHeaders,"Pwf Used (kPa)","Pwf Source","Water Cut (%)","PI (m3/day/kPa)","qmax (m3/day)","Valid","Validation"];
-      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.measuredPwf,r.wellType,r.thp,r.pip,r.glPressure,r.referenceMd,r.targetMd,r.gradient,r.pwf,r.pwfSource,r.waterCut,r.pi,r.qmax,r.valid,r.reasons.join("; ")]
+      const header = [...testHeaders,"Pwf Used (kPa)","Pwf Source","Water Cut (%)","Gross Rate (m3/day)","PI (m3/day/kPa)","qmax (m3/day)","Valid","Validation"];
+      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.measuredPwf,r.wellType,r.thp,r.pip,r.glPressure,r.referenceMd,r.targetMd,r.gradient,r.pwf,r.pwfSource,r.waterCut,r.grossRate,r.pi,r.qmax,r.valid,r.reasons.join("; ")]
         .map((value) => typeof value === "number" && !Number.isFinite(value) ? null : value));
       downloadWorkbook("petropi-filtered-tests.xlsx", "WellTests", [header,...body]);
     });
