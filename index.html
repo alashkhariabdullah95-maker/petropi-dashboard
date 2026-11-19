@@ -233,6 +233,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       glPressure:["injection-point tubing pressure (kpa)","injection-point tubing pressure","gas lift injection-point tubing pressure (kpa)"],
       referenceMd:["reference md (m)","reference md","reference measured depth (m)"],
       targetMd:["target md (m)","target md","target measured depth (m)","perforation md (m)","perforation md"],
+      espDepth:["esp depth","esp depth (m)","esp depth (md)","esp depth (m md)"],
+      perfDepth:["perf depth","perf depth (m)","perf depth (md)","perf depth (m md)"],
       gradient:["flowing pressure gradient (kpa/m md)","pressure gradient (kpa/m md)"]
     };
     const pwfReferences = new Map([
@@ -300,8 +302,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           grossRate: indexes.liquid === -1 ? undefined : parseNumeric(cells[indexes.liquid]),
           gas: indexes.gas === -1 ? 0 : parseNumeric(cells[indexes.gas]),
           pr: parseNumeric(cells[indexes.pr]),
-          ...Object.fromEntries(pwfInputs.map(([key]) => [key, cells[indexes[key]] ?? ""]))
+          ...readPwfInputs(cells, indexes)
         }));
+    }
+    function readPwfInputs(cells, indexes) {
+      const inputs = Object.fromEntries(pwfInputs.map(([key]) => [key, cells[indexes[key]] ?? ""]));
+      if (String(inputs.wellType).trim().toUpperCase() === "ESP") {
+        if (!String(inputs.referenceMd).trim()) inputs.referenceMd = cells[indexes.espDepth] ?? "";
+        if (!String(inputs.targetMd).trim()) inputs.targetMd = cells[indexes.perfDepth] ?? "";
+      }
+      return inputs;
     }
     function readLiquidRates(cells, indexes) {
       const oilInput = cells[indexes.oil];
@@ -357,8 +367,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       const count = reasons.length;
       if (!Number.isFinite(pressure) || pressure < 0) reasons.push(`Supply nonnegative ${label} (kPa)`);
       if (wellType === "FF" && String(row.referenceMd ?? "").trim() && parseNumeric(row.referenceMd) !== 0) reasons.push("FF reference MD must be blank or 0 m (wellhead datum)");
-      if (!Number.isFinite(referenceMd) || referenceMd < 0) reasons.push("Supply nonnegative reference MD (m)");
-      if (!Number.isFinite(targetMd) || targetMd < 0) reasons.push("Supply nonnegative target MD (m)");
+      if (!Number.isFinite(referenceMd) || referenceMd < 0) reasons.push(wellType === "ESP" ? "Supply nonnegative ESP Depth or Reference MD (m)" : "Supply nonnegative reference MD (m)");
+      if (!Number.isFinite(targetMd) || targetMd < 0) reasons.push(wellType === "ESP" ? "Supply nonnegative Perf. Depth or Target MD (m)" : "Supply nonnegative target MD (m)");
       else if (targetMd < referenceMd) reasons.push("Target MD must be greater than or equal to reference MD");
       if (!Number.isFinite(gradient) || gradient < 0) reasons.push("Supply nonnegative Flowing Pressure Gradient (kPa/m MD); TVD or unspecified gradients are not accepted");
       if (reasons.length !== count) return {value:NaN, source:"Unavailable"};
