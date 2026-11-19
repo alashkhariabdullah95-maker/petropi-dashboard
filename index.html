@@ -128,7 +128,8 @@
         <p class="subtle">Surveillance overview <span aria-hidden="true">·</span> Pressure kPa <span aria-hidden="true">·</span> Rates m³/day</p>
       </div>
       <div class="actions">
-        <label class="upload-button" for="xlsxFile">Upload XLSX<input id="xlsxFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+        <label class="upload-button" for="xlsxFile">Upload Excel<input id="xlsxFile" type="file" accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
+        <button id="downloadTemplate" class="secondary" type="button">Excel template</button>
         <button id="exportXlsx" class="secondary" type="button">Export filtered XLSX</button>
         <button id="exportQuality" class="secondary" type="button">Validation report XLSX</button>
       </div>
@@ -192,34 +193,53 @@
     const $ = (id) => document.getElementById(id);
     const numberFormat = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
     const aliases = {
-      well:["well","well name","well_name"], field:["field","asset","area"],
-      date:["date","test date","test_date"], oil:["oil rate","oil rate (m3/day)","oil_rate","qo","oil"],
-      water:["water rate","water rate (m3/day)","water_rate","qw","water"],
-      gas:["gas rate","gas rate (sm3/day)","gas_rate","qg","gas"],
-      pr:["pr","reservoir pressure","reservoir pressure (kpa)","average reservoir pressure","pressure"],
-      pwf:["pwf","flowing pressure","flowing bottomhole pressure","bottomhole flowing pressure"]
+      well:["well","well name","well_name","well id","well number","well no"],
+      field:["field","field name","asset","area"],
+      date:["date","test date","test_date","well test date","test datetime"],
+      oil:["oil rate","oil rate (m3/day)","oil rate (m3/d)","oil_rate","qo","oil production rate","oil"],
+      water:["water rate","water rate (m3/day)","water rate (m3/d)","water_rate","qw","water production rate","water"],
+      gas:["gas rate","gas rate (sm3/day)","gas rate (sm3/d)","gas_rate","qg","gas production rate","gas"],
+      pr:["pr","pr (kpa)","reservoir pressure","reservoir pressure (kpa)","average reservoir pressure","initial reservoir pressure","pressure"],
+      pwf:["pwf","pwf (kpa)","flowing pressure","flowing bottomhole pressure","bottomhole flowing pressure","flowing bottomhole pressure (kpa)","bottomhole pressure","bhp","flowing bhp"]
     };
 
     function normalizeHeader(value) {
-      return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+      return String(value || "").trim().toLowerCase()
+        .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/³/g, "3").replace(/²/g, "2").replace(/[^a-z0-9]/g, "");
+    }
+    function findHeader(matrix) {
+      for (let rowIndex = 0; rowIndex < Math.min(matrix.length, 50); rowIndex++) {
+        const headers = matrix[rowIndex].map(normalizeHeader);
+        const indexes = {};
+        for (const [key, names] of Object.entries(aliases)) {
+          const normalizedAliases = names.map(normalizeHeader);
+          indexes[key] = headers.findIndex((header) => normalizedAliases.some((alias) =>
+            header === alias || (alias.length >= 5 && header.startsWith(alias))
+          ));
+        }
+        const required = ["well","date","oil","water","pr","pwf"];
+        if (required.every((key) => indexes[key] !== -1)) return {rowIndex, indexes, headers:matrix[rowIndex]};
+      }
+      return null;
     }
     function parseWorkbook(workbook) {
       if (!workbook.SheetNames.length) throw new Error("Workbook contains no worksheets.");
-      const sheetName = workbook.SheetNames.includes("WellTests") ? "WellTests" : workbook.SheetNames[0];
-      const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {header:1, raw:true, defval:""})
-        .filter((line) => line.some((value) => String(value).trim() !== ""));
-      if (matrix.length < 2) throw new Error(`Worksheet "${sheetName}" must contain a header and at least one data row.`);
-      const headers = matrix[0].map(normalizeHeader);
-      const indexes = {};
-      for (const [key, names] of Object.entries(aliases)) {
-        indexes[key] = headers.findIndex((header) => names.map(normalizeHeader).includes(header));
+      const candidates = workbook.SheetNames.map((name) => {
+        const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[name], {header:1, raw:true, defval:""});
+        const match = findHeader(matrix);
+        return match ? {name, matrix, ...match} : null;
+      }).filter(Boolean);
+      if (!candidates.length) {
+        throw new Error("No worksheet has the required columns. Need Well, Date, Oil Rate, Water Rate, Pr (reservoir pressure), and Pwf (flowing pressure). Field and Gas Rate are optional.");
       }
-      for (const required of ["well", "field", "date", "oil", "water", "pr", "pwf"]) {
-        if (indexes[required] === -1) throw new Error(`Missing required column in "${sheetName}": ${aliases[required][0]}.`);
-      }
-      return matrix.slice(1).map((cells) => ({
-        well: String(cells[indexes.well] || "").trim(),
-        field: String(cells[indexes.field] || "").trim(),
+      const selected = candidates.find((candidate) => candidate.name.toLowerCase() === "welltests") || candidates[0];
+      const {matrix, rowIndex, indexes} = selected;
+      return matrix.slice(rowIndex + 1)
+        .filter((cells) => cells.some((value) => String(value).trim() !== ""))
+        .map((cells) => ({
+        well: String(cells[indexes.well] ?? "").trim(),
+        field: indexes.field === -1 ? "Unassigned" : (String(cells[indexes.field] ?? "").trim() || "Unassigned"),
         date: normalizeWorkbookDate(cells[indexes.date]),
         oil: parseNumeric(cells[indexes.oil]),
         water: parseNumeric(cells[indexes.water]),
@@ -250,7 +270,6 @@
     function analyze(row) {
       const reasons = [];
       if (!row.well) reasons.push("Missing well");
-      if (!row.field) reasons.push("Missing field");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date) || Number.isNaN(Date.parse(row.date))) reasons.push("Invalid date");
       if (![row.oil,row.water,row.gas,row.pr,row.pwf].every(Number.isFinite)) reasons.push("Missing or invalid numeric value");
       if ([row.oil,row.water,row.gas].some((v) => v < 0)) reasons.push("Negative rate");
@@ -441,18 +460,26 @@
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName);
       XLSX.writeFile(workbook, filename, {compression:true});
     }
+    $("downloadTemplate").addEventListener("click", () => {
+      const headers = ["Well","Field","Date","Oil Rate (m3/day)","Water Rate (m3/day)","Gas Rate (Sm3/day)","Pr (kPa)","Pwf (kPa)"];
+      downloadWorkbook("petropi-well-tests-template.xlsx", "WellTests", [
+        headers,
+        ["W01","North","2026-01-01",120,30,0,22000,18000],
+        ["W01","North","2026-06-01",133,29,0,21600,17600]
+      ]);
+    });
     $("xlsxFile").addEventListener("change", async (event) => {
       const file = event.target.files[0]; if (!file) return;
       try {
         const workbook = XLSX.read(await file.arrayBuffer(), {type:"array", cellDates:true});
         const imported = parseWorkbook(workbook);
-        if (!imported.length) throw new Error("Workbook has no data rows.");
+        if (!imported.length) throw new Error("Workbook has no data rows below the header.");
         rows = imported; sourceName = file.name; $("fieldFilter").value = ""; $("wellFilter").value = "";
         $("startDate").value = ""; $("endDate").value = "";
         $("notice").className = "notice"; $("notice").textContent = `Loaded ${rows.length} records from ${file.name}. Invalid records are shown with validation reasons.`;
         render();
       } catch (error) {
-        $("notice").className = "notice error"; $("notice").textContent = `Could not load XLSX: ${error.message}`;
+        $("notice").className = "notice error"; $("notice").textContent = `Could not read Excel workbook: ${error.message}`;
       } finally { event.target.value = ""; }
     });
     $("exportXlsx").addEventListener("click", () => {
