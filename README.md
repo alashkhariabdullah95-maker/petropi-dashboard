@@ -18,15 +18,15 @@ Required columns are `Well`, `Date`, `Oil Rate`, `Water Rate`, and `Pr` (reservo
 
 ## Flowing bottomhole pressure (Pwf)
 
-Use **Excel template** for the column names and one example of each well type. Leave `Measured Pwf (kPa)` blank to estimate it. On each row, provide `Well Type`, `Target TVD (m)`, `Flowing Pressure Gradient (kPa/m)`, and the applicable reference:
+Use **Excel template** for the column names and one example of each well type. Leave `Measured Pwf (kPa)` blank to estimate it. On each row, provide `Well Type`, `Target MD (m)`, `Flowing Pressure Gradient (kPa/m MD)`, and the applicable reference:
 
-| Well Type | Reference pressure (kPa) | Reference TVD (m) |
+| Well Type | Reference pressure (kPa) | Reference MD (m) |
 |---|---|---|
 | `FF` (naturally flowing) | `Wellhead Tubing Pressure (kPa)` | Wellhead, blank or zero |
-| `ESP` (electric submersible pump) | `Pump Intake Pressure (kPa)` | Pump intake TVD |
-| `GL` (gas lift) | `Injection-Point Tubing Pressure (kPa)` | Injection point TVD |
+| `ESP` (electric submersible pump) | `Pump Intake Pressure (kPa)` | Pump intake MD |
+| `GL` (gas lift) | `Injection-Point Tubing Pressure (kPa)` | Injection point MD |
 
-`Pwf = reference pressure + flowing pressure gradient × (target TVD − reference TVD)`. Use true vertical depths from the same datum, positive downward, not measured depths. The target should be the reservoir pressure reference depth, typically the perforation midpoint if `Pr` is reported there. Use a consistent pressure basis for `Pr`, measured Pwf, and reference pressures; use absolute pressures for Vogel qmax. For GL, use tubing pressure at the active injection point, not annulus or surface injection pressure. Supply the average flowing gradient for the specific interval (below the intake for ESP and below the injection point for GL); the app does not model pump head or multiphase flow.
+`Pwf = reference pressure + flowing pressure gradient × (target MD − reference MD)`. Use measured depths along the wellbore from the same datum. The gradient must be per meter of measured depth for that interval, not per meter of TVD. When migrating an old template, replace the TVD inputs and gradient with MD-based values; do not just rename the columns. The target should be the reservoir pressure reference depth, typically the perforation midpoint if `Pr` is reported there. Use a consistent pressure basis for `Pr`, measured Pwf, and reference pressures; use absolute pressures for Vogel qmax. For GL, use tubing pressure at the active injection point, not annulus or surface injection pressure. Supply the average flowing gradient for the specific interval (below the intake for ESP and below the injection point for GL); the app does not model pump head or multiphase flow.
 
 The dashboard labels measured and estimated values separately, uses the selected Pwf for PI and Vogel qmax, and flags missing inputs and `Pwf ≥ Pr`. A nonblank measured Pwf takes precedence; an invalid measurement is flagged rather than silently replaced. The XLSX export retains the estimate inputs, result, and source. These are screening estimates; verify gradients and results before operational use.
 

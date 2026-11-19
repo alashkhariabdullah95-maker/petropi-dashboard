@@ -173,7 +173,7 @@
       </div>
     </section>
     <p id="notice" class="notice" role="status" aria-live="polite"></p>
-    <p class="footer">Estimated Pwf uses the reference pressure plus the average flowing gradient across the reference-to-target true vertical depth interval. It is not a downhole measurement. Validate the estimate before operational use.</p>
+    <p class="footer">Estimated Pwf uses the reference pressure plus the average flowing gradient (kPa per meter of MD) multiplied by the measured-depth interval. It is not a downhole measurement. Validate the estimate before operational use.</p>
   </main>
 
   <script>
@@ -229,9 +229,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       thp:["wellhead tubing pressure (kpa)","wellhead tubing pressure","tubing head pressure (kpa)","thp (kpa)","thp"],
       pip:["pump intake pressure (kpa)","pump intake pressure","pip (kpa)","pip"],
       glPressure:["injection-point tubing pressure (kpa)","injection-point tubing pressure","gas lift injection-point tubing pressure (kpa)"],
-      referenceTvd:["reference tvd (m)","reference tvd"],
-      targetTvd:["target tvd (m)","target tvd","perforation tvd (m)","perforation tvd"],
-      gradient:["flowing pressure gradient (kpa/m)","flowing pressure gradient","pressure gradient (kpa/m)"]
+      referenceMd:["reference md (m)","reference md","reference measured depth (m)"],
+      targetMd:["target md (m)","target md","target measured depth (m)","perforation md (m)","perforation md"],
+      gradient:["flowing pressure gradient (kpa/m md)","pressure gradient (kpa/m md)"]
     };
     const pwfReferences = new Map([
       ["FF", ["thp", "wellhead tubing pressure", "FF estimate (wellhead)"]],
@@ -241,8 +241,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const pwfInputs = [
       ["pwf","Measured Pwf (kPa)"], ["wellType","Well Type"],
       ["thp","Wellhead Tubing Pressure (kPa)"], ["pip","Pump Intake Pressure (kPa)"],
-      ["glPressure","Injection-Point Tubing Pressure (kPa)"], ["referenceTvd","Reference TVD (m)"],
-      ["targetTvd","Target TVD (m)"], ["gradient","Flowing Pressure Gradient (kPa/m)"]
+      ["glPressure","Injection-Point Tubing Pressure (kPa)"], ["referenceMd","Reference MD (m)"],
+      ["targetMd","Target MD (m)"], ["gradient","Flowing Pressure Gradient (kPa/m MD)"]
     ];
     const testHeaders = ["Well","Field","Date","Oil Rate (m3/day)","Water Rate (m3/day)","Gas Rate (Sm3/day)","Pr (kPa)",...pwfInputs.map(([,label]) => label)];
 
@@ -318,18 +318,18 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
       const [key, label, source] = reference;
       const pressure = parseNumeric(row[key]);
-      const referenceTvd = wellType === "FF" ? 0 : parseNumeric(row.referenceTvd);
-      const targetTvd = parseNumeric(row.targetTvd);
+      const referenceMd = wellType === "FF" ? 0 : parseNumeric(row.referenceMd);
+      const targetMd = parseNumeric(row.targetMd);
       const gradient = parseNumeric(row.gradient);
       const count = reasons.length;
       if (!Number.isFinite(pressure) || pressure < 0) reasons.push(`Supply nonnegative ${label} (kPa)`);
-      if (wellType === "FF" && String(row.referenceTvd ?? "").trim() && parseNumeric(row.referenceTvd) !== 0) reasons.push("FF reference TVD must be blank or 0 m (wellhead datum)");
-      if (!Number.isFinite(referenceTvd) || referenceTvd < 0) reasons.push("Supply nonnegative reference TVD (m)");
-      if (!Number.isFinite(targetTvd) || targetTvd < 0) reasons.push("Supply nonnegative target TVD (m)");
-      else if (targetTvd < referenceTvd) reasons.push("Target TVD must be at or below reference TVD");
-      if (!Number.isFinite(gradient) || gradient < 0) reasons.push("Supply nonnegative flowing pressure gradient (kPa/m)");
+      if (wellType === "FF" && String(row.referenceMd ?? "").trim() && parseNumeric(row.referenceMd) !== 0) reasons.push("FF reference MD must be blank or 0 m (wellhead datum)");
+      if (!Number.isFinite(referenceMd) || referenceMd < 0) reasons.push("Supply nonnegative reference MD (m)");
+      if (!Number.isFinite(targetMd) || targetMd < 0) reasons.push("Supply nonnegative target MD (m)");
+      else if (targetMd < referenceMd) reasons.push("Target MD must be greater than or equal to reference MD");
+      if (!Number.isFinite(gradient) || gradient < 0) reasons.push("Supply nonnegative Flowing Pressure Gradient (kPa/m MD); TVD or unspecified gradients are not accepted");
       if (reasons.length !== count) return {value:NaN, source:"Unavailable"};
-      const value = pressure + gradient * (targetTvd - referenceTvd);
+      const value = pressure + gradient * (targetMd - referenceMd);
       if (!Number.isFinite(value)) {
         reasons.push("Estimated Pwf is out of range");
         return {value:NaN, source:"Unavailable"};
@@ -564,7 +564,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     $("exportXlsx").addEventListener("click", () => {
       const data = visibleRows();
       const header = [...testHeaders,"Pwf Used (kPa)","Pwf Source","Water Cut (%)","PI (m3/day/kPa)","qmax (m3/day)","Valid","Validation"];
-      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.measuredPwf,r.wellType,r.thp,r.pip,r.glPressure,r.referenceTvd,r.targetTvd,r.gradient,r.pwf,r.pwfSource,r.waterCut,r.pi,r.qmax,r.valid,r.reasons.join("; ")]
+      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.measuredPwf,r.wellType,r.thp,r.pip,r.glPressure,r.referenceMd,r.targetMd,r.gradient,r.pwf,r.pwfSource,r.waterCut,r.pi,r.qmax,r.valid,r.reasons.join("; ")]
         .map((value) => typeof value === "number" && !Number.isFinite(value) ? null : value));
       downloadWorkbook("petropi-filtered-tests.xlsx", "WellTests", [header,...body]);
     });
