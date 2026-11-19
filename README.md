@@ -16,7 +16,7 @@ Required columns are `Well`, `Field`, `Date`, `Oil Rate`, `Water Rate`, `Pr`, an
 
 ## GitHub Pages
 
-This repository is configured to publish the root of the `main` branch through GitHub Pages. After the first deployment completes, the published link above will serve the dashboard.
+The workflow in `.github/workflows/pages.yml` publishes the repository root to GitHub Pages whenever `main` is updated. After the first deployment completes, the published link above will serve the dashboard.
 
 ## Spreadsheet library
 
