@@ -167,13 +167,13 @@
       <div class="table-heading"><div><h2>Well test data</h2><p id="rowSummary" class="subtle" style="margin-top:4px">—</p></div></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Well</th><th>Field</th><th>Date</th><th>Oil rate</th><th>Water rate</th><th>Water cut</th><th>Pr (kPa)</th><th>Pwf (kPa)</th><th>PI</th><th>qmax</th><th>Quality</th></tr></thead>
+          <thead><tr><th>Well</th><th>Type</th><th>Field</th><th>Date</th><th>Oil rate</th><th>Water rate</th><th>Water cut</th><th>Pr (kPa)</th><th>Pwf (kPa)</th><th>Pwf source</th><th>PI</th><th>qmax</th><th>Quality</th></tr></thead>
           <tbody id="dataRows"></tbody>
         </table>
       </div>
     </section>
     <p id="notice" class="notice" role="status" aria-live="polite"></p>
-    <p class="footer">Demo values are illustrative. PI uses liquid rate / (Pr − Pwf); qmax uses the Vogel IPR relationship. Validate engineering assumptions before operational use.</p>
+    <p class="footer">Estimated Pwf uses the reference pressure plus the average flowing gradient across the reference-to-target true vertical depth interval. It is not a downhole measurement. Validate the estimate before operational use.</p>
   </main>
 
   <script>
@@ -224,8 +224,27 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       water:["water rate","water rate (m3/day)","water rate (m3/d)","water_rate","qw","water production rate","water"],
       gas:["gas rate","gas rate (sm3/day)","gas rate (sm3/d)","gas_rate","qg","gas production rate","gas"],
       pr:["pr","pr (kpa)","reservoir pressure","reservoir pressure (kpa)","average reservoir pressure","initial reservoir pressure","pressure"],
-      pwf:["pwf","pwf (kpa)","flowing pressure","flowing bottomhole pressure","bottomhole flowing pressure","flowing bottomhole pressure (kpa)","bottomhole pressure","bhp","flowing bhp"]
+      pwf:["measured pwf (kpa)","measured pwf","pwf","pwf (kpa)","flowing pressure","flowing bottomhole pressure","bottomhole flowing pressure","flowing bottomhole pressure (kpa)","bottomhole pressure","bhp","flowing bhp"],
+      wellType:["well type","lift type","production method"],
+      thp:["wellhead tubing pressure (kpa)","wellhead tubing pressure","tubing head pressure (kpa)","thp (kpa)","thp"],
+      pip:["pump intake pressure (kpa)","pump intake pressure","pip (kpa)","pip"],
+      glPressure:["injection-point tubing pressure (kpa)","injection-point tubing pressure","gas lift injection-point tubing pressure (kpa)"],
+      referenceTvd:["reference tvd (m)","reference tvd"],
+      targetTvd:["target tvd (m)","target tvd","perforation tvd (m)","perforation tvd"],
+      gradient:["flowing pressure gradient (kpa/m)","flowing pressure gradient","pressure gradient (kpa/m)"]
     };
+    const pwfReferences = new Map([
+      ["FF", ["thp", "wellhead tubing pressure", "FF estimate (wellhead)"]],
+      ["ESP", ["pip", "pump intake pressure", "ESP estimate (pump intake)"]],
+      ["GL", ["glPressure", "injection-point tubing pressure", "GL estimate (injection point)"]]
+    ]);
+    const pwfInputs = [
+      ["pwf","Measured Pwf (kPa)"], ["wellType","Well Type"],
+      ["thp","Wellhead Tubing Pressure (kPa)"], ["pip","Pump Intake Pressure (kPa)"],
+      ["glPressure","Injection-Point Tubing Pressure (kPa)"], ["referenceTvd","Reference TVD (m)"],
+      ["targetTvd","Target TVD (m)"], ["gradient","Flowing Pressure Gradient (kPa/m)"]
+    ];
+    const testHeaders = ["Well","Field","Date","Oil Rate (m3/day)","Water Rate (m3/day)","Gas Rate (Sm3/day)","Pr (kPa)",...pwfInputs.map(([,label]) => label)];
 
     function normalizeHeader(value) {
       return String(value || "").trim().toLowerCase()
@@ -238,12 +257,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         const indexes = {};
         for (const [key, names] of Object.entries(aliases)) {
           const normalizedAliases = names.map(normalizeHeader);
-          indexes[key] = headers.findIndex((header) => normalizedAliases.some((alias) =>
-            header === alias || (alias.length >= 5 && header.startsWith(alias))
-          ));
+          indexes[key] = normalizedAliases.reduce((index, alias) => index === -1 ? headers.indexOf(alias) : index, -1);
+          if (indexes[key] === -1 && ["well","field","date"].includes(key)) {
+            indexes[key] = headers.findIndex((header) => normalizedAliases.some((alias) => alias.length >= 5 && header.startsWith(alias)));
+          }
         }
-        const required = ["well","date","oil","water","pr","pwf"];
-        if (required.every((key) => indexes[key] !== -1)) return {rowIndex, indexes, headers:matrix[rowIndex]};
+        const required = ["well","date","oil","water","pr"];
+        if (required.every((key) => indexes[key] !== -1) && (indexes.pwf !== -1 || indexes.wellType !== -1)) return {rowIndex, indexes};
       }
       return null;
     }
@@ -255,7 +275,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         return match ? {name, matrix, ...match} : null;
       }).filter(Boolean);
       if (!candidates.length) {
-        throw new Error("No worksheet has the required columns. Need Well, Date, Oil Rate, Water Rate, Pr (reservoir pressure), and Pwf (flowing pressure). Field and Gas Rate are optional.");
+        throw new Error("No worksheet has the required columns: Well, Date, Oil Rate, Water Rate, Pr (kPa), and either Measured Pwf or Well Type. Use the Excel template for the Pwf calculation columns.");
       }
       const selected = candidates.find((candidate) => candidate.name.toLowerCase() === "welltests") || candidates[0];
       const {matrix, rowIndex, indexes} = selected;
@@ -269,7 +289,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         water: parseNumeric(cells[indexes.water]),
         gas: indexes.gas === -1 ? 0 : parseNumeric(cells[indexes.gas]),
         pr: parseNumeric(cells[indexes.pr]),
-        pwf: parseNumeric(cells[indexes.pwf])
+        ...Object.fromEntries(pwfInputs.map(([key]) => [key, cells[indexes[key]] ?? ""]))
       }));
     }
     function normalizeWorkbookDate(value) {
@@ -285,6 +305,37 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       if (clean === "") return NaN;
       return Number(clean);
     }
+    function resolvePwf(row, wellType, reasons) {
+      if (String(row.pwf ?? "").trim()) {
+        const value = parseNumeric(row.pwf);
+        if (!Number.isFinite(value) || value < 0) reasons.push("Measured Pwf must be a nonnegative pressure (kPa)");
+        return {value, source:"Measured"};
+      }
+      const reference = pwfReferences.get(wellType);
+      if (!reference) {
+        reasons.push("Supply measured Pwf or select Well Type FF, ESP, or GL");
+        return {value:NaN, source:"Unavailable"};
+      }
+      const [key, label, source] = reference;
+      const pressure = parseNumeric(row[key]);
+      const referenceTvd = wellType === "FF" ? 0 : parseNumeric(row.referenceTvd);
+      const targetTvd = parseNumeric(row.targetTvd);
+      const gradient = parseNumeric(row.gradient);
+      const count = reasons.length;
+      if (!Number.isFinite(pressure) || pressure < 0) reasons.push(`Supply nonnegative ${label} (kPa)`);
+      if (wellType === "FF" && String(row.referenceTvd ?? "").trim() && parseNumeric(row.referenceTvd) !== 0) reasons.push("FF reference TVD must be blank or 0 m (wellhead datum)");
+      if (!Number.isFinite(referenceTvd) || referenceTvd < 0) reasons.push("Supply nonnegative reference TVD (m)");
+      if (!Number.isFinite(targetTvd) || targetTvd < 0) reasons.push("Supply nonnegative target TVD (m)");
+      else if (targetTvd < referenceTvd) reasons.push("Target TVD must be at or below reference TVD");
+      if (!Number.isFinite(gradient) || gradient < 0) reasons.push("Supply nonnegative flowing pressure gradient (kPa/m)");
+      if (reasons.length !== count) return {value:NaN, source:"Unavailable"};
+      const value = pressure + gradient * (targetTvd - referenceTvd);
+      if (!Number.isFinite(value)) {
+        reasons.push("Estimated Pwf is out of range");
+        return {value:NaN, source:"Unavailable"};
+      }
+      return {value, source};
+    }
     function normalizeDate(value) {
       const text = String(value || "").trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
@@ -295,19 +346,22 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       const reasons = [];
       if (!row.well) reasons.push("Missing well");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date) || Number.isNaN(Date.parse(row.date))) reasons.push("Invalid date");
-      if (![row.oil,row.water,row.gas,row.pr,row.pwf].every(Number.isFinite)) reasons.push("Missing or invalid numeric value");
+      if (![row.oil,row.water,row.gas].every(Number.isFinite)) reasons.push("Missing or invalid rate");
       if ([row.oil,row.water,row.gas].some((v) => v < 0)) reasons.push("Negative rate");
-      if (!(row.pr > 0) || !(row.pwf >= 0) || !(row.pr > row.pwf)) reasons.push("Require Pr > Pwf ≥ 0");
+      const wellType = String(row.wellType ?? "").trim().toUpperCase();
+      const {value:pwf, source:pwfSource} = resolvePwf(row, wellType, reasons);
+      if (!Number.isFinite(row.pr) || row.pr <= 0) reasons.push("Supply positive reservoir pressure Pr (kPa)");
+      else if (Number.isFinite(pwf) && pwf >= row.pr) reasons.push("Require Pr > Pwf");
       const valid = reasons.length === 0;
-      const drawdown = valid ? row.pr - row.pwf : NaN;
+      const drawdown = valid ? row.pr - pwf : NaN;
       const liquid = valid ? row.oil + row.water : NaN;
       const pi = valid && drawdown > 0 ? liquid / drawdown : NaN;
-      const ratio = valid ? row.pwf / row.pr : NaN;
+      const ratio = valid ? pwf / row.pr : NaN;
       const denominator = 1 - 0.2 * ratio - 0.8 * ratio * ratio;
       const qmax = valid && denominator > 0 ? row.oil / denominator : NaN;
       const waterCut = valid && liquid > 0 ? row.water / liquid * 100 : (valid ? 0 : NaN);
       if (valid && (!Number.isFinite(pi) || !Number.isFinite(qmax))) reasons.push("Calculation unavailable");
-      return {...row, pi, qmax, waterCut, valid: reasons.length === 0, reasons};
+      return {...row, wellType, measuredPwf:row.pwf, pwf, pwfSource, pi, qmax, waterCut, valid: reasons.length === 0, reasons};
     }
     function fmt(value, digits = 2) {
       return Number.isFinite(value) ? new Intl.NumberFormat(undefined, {maximumFractionDigits:digits, minimumFractionDigits:digits}).format(value) : "—";
@@ -408,8 +462,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       tbody.replaceChildren();
       for (const r of list) {
         const tr = document.createElement("tr");
-        const values = [r.well || "—", r.field || "—", r.date || "—", fmt(r.oil,1), fmt(r.water,1),
-          Number.isFinite(r.waterCut) ? `${fmt(r.waterCut,1)}%` : "—", fmt(r.pr,0), fmt(r.pwf,0), fmt(r.pi,4), fmt(r.qmax,1)];
+        const values = [r.well || "—", r.wellType || "—", r.field || "—", r.date || "—", fmt(r.oil,1), fmt(r.water,1),
+          Number.isFinite(r.waterCut) ? `${fmt(r.waterCut,1)}%` : "—", fmt(r.pr,0), fmt(r.pwf,1), r.pwfSource, fmt(r.pi,4), fmt(r.qmax,1)];
         for (const value of values) { const td = document.createElement("td"); td.textContent = value; tr.append(td); }
         const quality = document.createElement("td");
         quality.className = `quality ${r.valid ? "trend-good" : "trend-danger"}`;
@@ -419,7 +473,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
       if (!list.length) {
         const tr = document.createElement("tr"), td = document.createElement("td");
-        td.colSpan = 11; td.textContent = "No tests match the selected filters."; td.className = "subtle";
+        td.colSpan = 13; td.textContent = "No tests match the selected filters."; td.className = "subtle";
         tr.append(td); tbody.append(tr);
       }
     }
@@ -485,11 +539,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       XLSX.writeFile(workbook, filename, {compression:true});
     }
     $("downloadTemplate").addEventListener("click", () => {
-      const headers = ["Well","Field","Date","Oil Rate (m3/day)","Water Rate (m3/day)","Gas Rate (Sm3/day)","Pr (kPa)","Pwf (kPa)"];
       downloadWorkbook("petropi-well-tests-template.xlsx", "WellTests", [
-        headers,
-        ["W01","North","2026-01-01",120,30,0,22000,18000],
-        ["W01","North","2026-06-01",133,29,0,21600,17600]
+        testHeaders,
+        ["FF01","North","2026-01-01",120,30,0,22000,null,"FF",2000,null,null,null,2000,7],
+        ["ESP01","North","2026-01-01",133,29,0,21600,null,"ESP",null,12000,null,1600,2200,8],
+        ["GL01","South","2026-01-01",110,35,0,24000,null,"GL",null,null,8500,1200,2300,8],
+        ["W01","South","2026-01-01",100,25,0,22000,18000]
       ]);
     });
     $("xlsxFile").addEventListener("change", async (event) => {
@@ -508,14 +563,15 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     });
     $("exportXlsx").addEventListener("click", () => {
       const data = visibleRows();
-      const header = ["Well","Field","Date","Oil Rate (m3/day)","Water Rate (m3/day)","Gas Rate (Sm3/day)","Pr (kPa)","Pwf (kPa)","Water Cut (%)","PI (m3/day/kPa)","qmax (m3/day)","Valid","Validation"];
-      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.pwf,r.waterCut,r.pi,r.qmax,r.valid,r.reasons.join("; ")]);
+      const header = [...testHeaders,"Pwf Used (kPa)","Pwf Source","Water Cut (%)","PI (m3/day/kPa)","qmax (m3/day)","Valid","Validation"];
+      const body = data.map((r)=>[r.well,r.field,r.date,r.oil,r.water,r.gas,r.pr,r.measuredPwf,r.wellType,r.thp,r.pip,r.glPressure,r.referenceTvd,r.targetTvd,r.gradient,r.pwf,r.pwfSource,r.waterCut,r.pi,r.qmax,r.valid,r.reasons.join("; ")]
+        .map((value) => typeof value === "number" && !Number.isFinite(value) ? null : value));
       downloadWorkbook("petropi-filtered-tests.xlsx", "WellTests", [header,...body]);
     });
     $("exportQuality").addEventListener("click", () => {
       const data = visibleRows();
-      const header = ["Well","Field","Date","Valid","Validation issues"];
-      const body = data.map((r)=>[r.well,r.field,r.date,r.valid,r.reasons.join("; ")]);
+      const header = ["Well","Field","Date","Well Type","Pwf Used (kPa)","Pwf Source","Valid","Validation issues"];
+      const body = data.map((r)=>[r.well,r.field,r.date,r.wellType,Number.isFinite(r.pwf) ? r.pwf : null,r.pwfSource,r.valid,r.reasons.join("; ")]);
       downloadWorkbook("petropi-validation-report.xlsx", "Validation", [header,...body]);
     });
     $("fieldFilter").addEventListener("change", () => { $("wellFilter").value=""; render(); });
